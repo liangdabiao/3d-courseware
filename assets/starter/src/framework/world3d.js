@@ -38,8 +38,9 @@ export function tween(obj, key, to, dur = 0.5, onDone) {
   tweens.add({ obj, key, from, to, t: 0, dur, onDone });
 }
 
-/** 相机飞行：pos/target 一起缓动（步骤运镜用） */
+/** 相机飞行：pos/target 一起缓动（步骤运镜用）。非有限输入直接忽略，绝不让 NaN 进入相机。 */
 export function flyCamera(cam, controls, pos, tgt, dur = 0.8) {
+  if (!isFiniteV3(pos) || !isFiniteV3(tgt) || !isFiniteV3(cam.position) || !isFiniteV3(controls.target)) return;
   const p0 = cam.position.clone(), t0 = controls.target.clone();
   const state = { k: 0 };
   for (const t of [...tweens]) if (t.tag === "cam") tweens.delete(t);
@@ -123,7 +124,7 @@ export function initGL(canvas, tone = {}) {
     const floorY = tone.floorY ?? 0;
     const ground = new THREE.Mesh(
       new THREE.CircleGeometry(size * 20, 48),
-      new THREE.MeshStandardMaterial({ color: col(tone.floor ?? "#eceef0"), roughness: 0.95, metalness: 0 }),
+      new THREE.MeshStandardMaterial({ color: col(tone.floor ?? "#eceef0"), roughness: 0.95, metalness: 0, side: THREE.DoubleSide }),
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = floorY - 0.001;
@@ -145,18 +146,27 @@ export function initCamera(canvas, CAMERA) {
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.enablePan = false;
-  const polar = CAMERA.polar ?? [8, 62];
-  controls.minPolarAngle = (polar[0] * Math.PI) / 180;
-  controls.maxPolarAngle = (polar[1] * Math.PI) / 180;
+  /* 极角（仰望/俯视角度）默认完全自由；仅当课程显式写 clampPolar:true 时才用 polar 区间夹持 */
+  if (CAMERA.clampPolar && Array.isArray(CAMERA.polar)) {
+    const polar = CAMERA.polar;
+    controls.minPolarAngle = (polar[0] * Math.PI) / 180;
+    controls.maxPolarAngle = (polar[1] * Math.PI) / 180;
+  }
   if (CAMERA.dist) { controls.minDistance = CAMERA.dist[0]; controls.maxDistance = CAMERA.dist[1]; }
   camera.position.set(6, 4, 8);
   return { camera, controls };
 }
 
-/** 包围盒 → 相机机位（box fit）。返回 {pos, tgt} */
+/** 非有限向量检测（NaN/Infinity 任意一种都算脏） */
+const isFiniteV3 = (v) =>
+  !!v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+
+/** 包围盒 → 相机机位（box fit）。空包围盒/非有限输入返回 null，调用方自行兜底。 */
 export function poseForBox(box3, camera, opts = {}) {
+  if (!box3 || box3.isEmpty()) return null;
   const center = box3.getCenter(new THREE.Vector3());
   const size = box3.getSize(new THREE.Vector3());
+  if (!isFiniteV3(center) || !isFiniteV3(size)) return null;
   const radius = Math.max(size.x, size.y, size.z, 0.001) * 0.5 + 0.001;
   const pitch = ((opts.pitch ?? 22) * Math.PI) / 180;
   const yaw = opts.yaw ?? (-0.2 * Math.PI) / 180 * 57.3; // 默认微偏，避免正对

@@ -27671,6 +27671,7 @@ void main() {
     tweens.add({ obj, key, from, to, t: 0, dur, onDone });
   }
   function flyCamera(cam, controls, pos, tgt, dur = 0.8) {
+    if (!isFiniteV3(pos) || !isFiniteV3(tgt) || !isFiniteV3(cam.position) || !isFiniteV3(controls.target)) return;
     const p0 = cam.position.clone(), t0 = controls.target.clone();
     const state = { k: 0 };
     for (const t of [...tweens]) if (t.tag === "cam") tweens.delete(t);
@@ -27747,7 +27748,7 @@ void main() {
       const floorY = tone.floorY ?? 0;
       const ground = new Mesh(
         new CircleGeometry(size * 20, 48),
-        new MeshStandardMaterial({ color: col(tone.floor ?? "#eceef0"), roughness: 0.95, metalness: 0 })
+        new MeshStandardMaterial({ color: col(tone.floor ?? "#eceef0"), roughness: 0.95, metalness: 0, side: DoubleSide })
       );
       ground.rotation.x = -Math.PI / 2;
       ground.position.y = floorY - 1e-3;
@@ -27763,9 +27764,11 @@ void main() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.enablePan = false;
-    const polar = CAMERA.polar ?? [8, 62];
-    controls.minPolarAngle = polar[0] * Math.PI / 180;
-    controls.maxPolarAngle = polar[1] * Math.PI / 180;
+    if (CAMERA.clampPolar && Array.isArray(CAMERA.polar)) {
+      const polar = CAMERA.polar;
+      controls.minPolarAngle = polar[0] * Math.PI / 180;
+      controls.maxPolarAngle = polar[1] * Math.PI / 180;
+    }
     if (CAMERA.dist) {
       controls.minDistance = CAMERA.dist[0];
       controls.maxDistance = CAMERA.dist[1];
@@ -27773,9 +27776,12 @@ void main() {
     camera.position.set(6, 4, 8);
     return { camera, controls };
   }
+  var isFiniteV3 = (v) => !!v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
   function poseForBox(box3, camera, opts = {}) {
+    if (!box3 || box3.isEmpty()) return null;
     const center = box3.getCenter(new Vector3());
     const size = box3.getSize(new Vector3());
+    if (!isFiniteV3(center) || !isFiniteV3(size)) return null;
     const radius = Math.max(size.x, size.y, size.z, 1e-3) * 0.5 + 1e-3;
     const pitch = (opts.pitch ?? 22) * Math.PI / 180;
     const yaw = opts.yaw ?? -0.2 * Math.PI / 180 * 57.3;
@@ -29319,11 +29325,12 @@ body.lowfps .cdbox,body.lowfps #toast{background:var(--glass-solid)}   /* \u53EA
     (C2.units || []).forEach((u, i) => {
       if (!(u.color >= 1 && u.color <= 5)) errs.push(`C.units[${i}].color=${u.color}\uFF1A\u8BC6\u522B\u8272\u53EA\u80FD\u662F 1\u20135\uFF08\u89C4\u8303 \xA72.4\uFF09`);
     });
-    const polar = wld.CAMERA?.polar ?? [8, 62];
+    const polarClamped = !!(world2.CAMERA?.clampPolar && Array.isArray(world2.CAMERA?.polar));
+    const polar = world2.CAMERA?.polar ?? [8, 62];
     const enumSw = Object.fromEntries((K.switches || []).filter((s) => s.states).map((s) => [s.key, s.states.map((x) => x.v)]));
     C2.steps.forEach((st, i) => {
       const d = `steps[${i}]\u300C${st.tag}\u300D`;
-      if (st.cam?.pitch != null && (st.cam.pitch < polar[0] || st.cam.pitch > polar[1]))
+      if (polarClamped && st.cam?.pitch != null && (st.cam.pitch < polar[0] || st.cam.pitch > polar[1]))
         errs.push(`${d}.cam.pitch=${st.cam.pitch} \u8D85\u51FA CAMERA.polar [${polar[0]}, ${polar[1]}]`);
       for (const k of st.layers || [])
         if (k !== "all" && !(k in (world2.LAYERS || {}))) errs.push(`${d}.layers \u91CC\u7684 '${k}' \u4E0D\u5728 world.LAYERS`);
@@ -29565,6 +29572,13 @@ body.lowfps .cdbox,body.lowfps #toast{background:var(--glass-solid)}   /* \u53EA
       hud.toast("\u5DF2\u91CD\u7F6E\u672C\u6B65");
       st.act?.demo && hud.toast("\u5DF2\u91CD\u7F6E\u672C\u6B65");
     }
+    function homePose() {
+      if ((world2.CAMERA || {}).homeBox) {
+        const b = new Box3(new Vector3(...world2.CAMERA.homeBox.min), new Vector3(...world2.CAMERA.homeBox.max));
+        return poseForBox(b, camera, { pitch: world2.CAMERA.pitch ?? 22, ty: 0.15 });
+      }
+      return null;
+    }
     function flyToStep(i, instant) {
       const st = C2.steps[i];
       let pose = null;
@@ -29573,10 +29587,8 @@ body.lowfps .cdbox,body.lowfps #toast{background:var(--glass-solid)}   /* \u53EA
         pose = poseForBox(b, camera, { pitch: st.cam.pitch ?? 22, yaw: st.cam.yaw, ty: 0.12 });
       } else if (st.unit >= 0 && wld.units?.[st.unit]?.box) {
         pose = poseForBox(wld.units[st.unit].box, camera, { pitch: st.cam?.pitch ?? 22, ty: 0.12 });
-      } else if ((world2.CAMERA || {}).homeBox) {
-        const b = new Box3(new Vector3(...world2.CAMERA.homeBox.min), new Vector3(...world2.CAMERA.homeBox.max));
-        pose = poseForBox(b, camera, { pitch: world2.CAMERA.pitch ?? 22, ty: 0.15 });
       }
+      if (!pose) pose = homePose();
       if (!pose) return;
       if (instant) {
         camera.position.copy(pose.pos);
@@ -29585,13 +29597,11 @@ body.lowfps .cdbox,body.lowfps #toast{background:var(--glass-solid)}   /* \u53EA
       } else flyCamera(camera, controls, pose.pos, pose.tgt, 0.8);
     }
     function focusUnit(i) {
-      if (wld.units?.[i]?.box) flyCamera(
-        camera,
-        controls,
-        poseForBox(wld.units[i].box, camera, { pitch: 22, ty: 0.12 }).pos,
-        wld.units[i].box.getCenter(new Vector3()),
-        0.6
-      );
+      const u = wld.units?.[i];
+      if (!u?.box) return;
+      const pose = poseForBox(u.box, camera, { pitch: 22, ty: 0.12 });
+      if (!pose) return;
+      flyCamera(camera, controls, pose.pos, pose.tgt, 0.6);
     }
     let quiz = null;
     function openQuiz() {
@@ -29951,7 +29961,15 @@ body.lowfps .cdbox,body.lowfps #toast{background:var(--glass-solid)}   /* \u53EA
         window.__frameErr = String(err && err.stack || err);
       }
     }
+    const lastGoodCam = { pos: new Vector3(6, 4, 8), tgt: new Vector3(0, 0.5, 0) };
+    const finiteV3 = (v) => Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
     function tickFrame(now) {
+      if (!finiteV3(camera.position) || !finiteV3(controls.target)) {
+        camera.position.copy(lastGoodCam.pos);
+        controls.target.copy(lastGoodCam.tgt);
+        controls.update();
+        console.warn("[camera] \u68C0\u6D4B\u5230\u975E\u6709\u9650\u673A\u4F4D\uFF0C\u5DF2\u81EA\u52A8\u6062\u590D\u4E0A\u4E00\u597D\u673A\u4F4D");
+      }
       const rawDt = (now - last) / 1e3;
       last = now;
       const dt = clamp2(Math.min(0.05, rawDt), 0, 0.05);
@@ -29989,7 +30007,11 @@ body.lowfps .cdbox,body.lowfps #toast{background:var(--glass-solid)}   /* \u53EA
         chartT = 0;
       }
       updateLabels();
-      renderer.render(scene, camera);
+      if (finiteV3(camera.position)) {
+        lastGoodCam.pos.copy(camera.position);
+        lastGoodCam.tgt.copy(controls.target);
+        renderer.render(scene, camera);
+      }
       fps.acc += rawDt;
       fps.n++;
       if (fps.acc > 0.5) {
@@ -30365,9 +30387,9 @@ body.lowfps .cdbox,body.lowfps #toast{background:var(--glass-solid)}   /* \u53EA
     CAMERA: {
       pitch: 20,
       yaw: -0.2,
-      polar: [8, 62],
       air: 1.05,
       ty: 0.15,
+      // 极角自由环绕；如需锁仰角才写 clampPolar:true + polar:[下,上]
       homeBox: { min: [-0.55, -0.03, -0.35], max: [0.75, 1.35, 0.35] }
     },
     LAYERS: {

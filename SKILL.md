@@ -10,9 +10,10 @@ description: 制作「铜匠实验室」风格的 3D 交互科学课件（单文
 ## 必读顺序（开工前按需加载）
 
 1. **`references/pedagogy.md`** —— 教学设计方法论（主线问题/知识链/步骤教研结构/考核/quiz/易错点防护）。**先读这个，内容设计先于一切代码。**
-2. **`references/architecture.md`** —— C/world/model/console 四块契约与字段 schema。
-3. **`references/subjects.md`** —— 学科差异化模式（物化生地各自场景骨架、时间表达、特效手法速查）。
-4. **`references/visual-spec.md`** —— 「清透实验室」视觉规范（设计 tokens、布局、3D 质感基准）。
+2. **`references/exemplars/`** —— 三份真实课件 C 对象范例（实验台/工业流程/演化型），写 C 草稿前对照读同类型的一份。
+3. **`references/architecture.md`** —— C/world/model/console 四块契约与字段 schema。
+4. **`references/subjects.md`** —— 学科差异化模式（物化生地各自场景骨架、时间表达、特效手法速查）。
+5. **`references/visual-spec.md`** —— 「清透实验室」视觉规范（设计 tokens、布局、3D 质感基准）。
 
 ## 制作流程
 
@@ -35,7 +36,8 @@ description: 制作「铜匠实验室」风格的 3D 交互科学课件（单文
 2. **读一遍 `src/course/course.demo.js`**（单摆示例课）——它是四块写法的活样本：C 的完整字段、world 的组件工厂/调色板/canvas 纹理、model 的 evaluate/tick、console 的全部控件配置。
 3. **写课程文件**：新建 `src/course/course.<slug>.js`，按 references 的规范实现 `C / world / model / consoleCfg` 四块导出；改 `main.js` 的 import。场景骨架选型看 references/subjects.md §0（知识链性质 → 场景骨架）。
 4. **构建**：`npm install`（首次，需联网装 three+esbuild）→ `node build.js` → 产物 `dist/<slug>.html` 单文件，双击即开。开发期用 `node build.js --watch`。
-5. 若构建环境不可用（无 node/网络）：按 references/architecture.md §0 的单文件布局手写拼接，three.js 用 CDN 版或从资料库课件中提取（见下）。
+5. 若构建环境不可用（无 node）：按 references/architecture.md §0 的单文件布局手写拼接——three.js 直接用模板自带的
+   `assets/starter/node_modules/three/build/three.module.min.js`（离线可用，无需网络），把框架与课程代码按 IIFE 形式手写内联。
 
 ### 阶段三：验收（红线自查 + 运行时验证）
 
@@ -52,28 +54,25 @@ description: 制作「铜匠实验室」风格的 3D 交互科学课件（单文
 运行时验证 API（构建产物内置）：`window.__lab` → `{ S, ctx, set(k,v), goto(i), step, score, live(), pump(n) 快进帧, quiz(), repair() }`。
 **测试不截图，断言 live() 的数值**（坐标/颜色十六进制/计数/读数）。启动错误会以红框显示在页面顶部。
 
-## 参考真实课件（资料库可用时）
+## 参考范例（skill 内置，无需外部资料）
 
-资料库在 `D:\tongjiang-lab-main\courses\`（54 门单文件 HTML + `../catalog.json` 元数据）。
-做同类新课前，**抽一门同类型课件研究其 C 与步骤写法**：
+写 C 对象草稿前，**读一份与目标类型最接近的内置范例**（真实课件的 C 对象完整复本，已解码为可读中文，见 `references/exemplars/`）：
 
-```bash
-# 提取课程代码段（框架入口函数之后的全部课程定制代码）并格式化阅读：
-python - <<'EOF'
-import re
-data = open(r'D:\tongjiang-lab-main\courses\<slug>.html', encoding='utf-8').read()
-m = re.search(r'function (\w+)\(\{C:', data)          # 框架入口
-j = data.rfind(';', 0, m.start()) + 1
-end = data.rfind('</script>')
-open(r'D:\temp-<slug>.js', 'w', encoding='utf-8').write(data[j:end])
-EOF
-npx --yes prettier --parser babel --print-width 110 D:\temp-<slug>.js > D:\temp-<slug>-pretty.js
-```
+| 范例文件 | 类型 | 重点学 |
+|---|---|---|
+| `chem-lab-sodium.C.js` | 实验台型 · 化学《金属钠的性质》 | 分站位步骤结构、对照组设计、expect 时间线数字、phenWords 现象词典 |
+| `chem-industry-haber.C.js` | 工业流程型 · 化学《合成氨工业》 | 按工艺流推进、破坏性体验步骤、plates 位号铭牌、accident 复盘剧本 |
+| `geo-karst.C.js` | 原理现象型 · 地理《喀斯特地貌》 | 演化链步骤、阶段 slider、非实验科的考核写法 |
 
-重点看：C.steps 的 expect/points 写法、world 的组件工厂与调色板、model 公式、console 配置。
-（注意：资料库原框架是压缩混淆的，**不要**试图把新课程拼进原文件；用自己的 starter 重建。原作品 CC BY-NC 4.0，仿写方法与自写代码没有问题，勿直接复制其代码。）
+读法：重点看 `steps[]` 每步的 q / act / expect / concl / points 写法与 `mainline.chain` 的知识链措辞，
+其次 `quiz`（干扰项如何写成迷思概念）、`panel`（读数 cal 依据注）。**不必逐字读 panel 全部文案**，
+找到你那一类步骤的 2–3 个样本即可。范例基于原版框架，但 C 是纯数据——用 starter 模板的契约
+实现同样的设计即可。
 
-## 目录结构
+法律注意：范例与 `assets/step-shell.css` 均来自铜匠实验室（CC BY-NC 4.0），文件头署名已保留；
+仿写方法与自写代码没有问题，勿把其代码直接用于商业用途。
+
+## 目录结构（全部自包含，无外部依赖）
 
 ```
 skills/3d-courseware/
@@ -82,10 +81,11 @@ skills/3d-courseware/
 │   ├── pedagogy.md          教学设计方法论（内容内核）
 │   ├── architecture.md      四块架构契约与 schema
 │   ├── subjects.md          学科差异化模式 + 特效手法速查
-│   └── visual-spec.md       清透实验室视觉规范
+│   ├── visual-spec.md       清透实验室视觉规范
+│   └── exemplars/           真实课件 C 对象范例 ×3（实验台/工业流程/演化型，CC BY-NC 署名在内）
 └── assets/
     ├── step-shell.css       外壳样式原件（含署名头，已内嵌进模板 style.js）
-    └── starter/             可运行模板（three + esbuild）
+    └── starter/             可运行模板（three + esbuild，node_modules 已自带，离线可构建）
         ├── build.js         构建脚本：打包成单文件 HTML（含启动错误红框）
         ├── package.json
         └── src/
@@ -96,5 +96,5 @@ skills/3d-courseware/
 ## 模板能力清单（engine 已实现）
 
 步骤推进（下一步自动演示/讲解揭示/重置本步/进度存档）、七种 act 门控、考核（hold 保持+events 中途注入+goal 条+加分）、检测 quiz（逐题解析/回看跳转/结算）、事故（倒计时→红闪→复盘→抢修）、中控台（主读数平滑/副读数/滑杆 ticks+band+ref/开关+多档/曲线图 curve+dash+dots+at+bandY+line/风险条/记录表）、名牌投影+站位聚焦环、公式横幅锚定、toast/倒计时/红闪、契约校验（中文报错）、lowfps 降级、`__lab` 调试 API。
-**尚未实现**（资料库有、模板没有，需要时按 architecture.md 手写）：section 剖面讲义图、subSeq 副读数轮播、记录表拟合线、名牌防重叠算法、着色器预热。
+**尚未实现**（原版框架有、本模板未含，需要时按 architecture.md 手写）：section 剖面讲义图、subSeq 副读数轮播、记录表拟合线、名牌防重叠算法、着色器预热。
 

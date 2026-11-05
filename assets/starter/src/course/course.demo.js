@@ -329,7 +329,7 @@ const PAL = {
 export const world = {
   TONE: { preset: "studio", size: 1.6, floor: "disc" },
   CAMERA: {
-    pitch: 20, yaw: -0.2, polar: [8, 62], air: 1.05, ty: 0.15,
+    pitch: 20, yaw: -0.2, air: 1.05, ty: 0.15,   // 极角自由环绕；如需锁仰角才写 clampPolar:true + polar:[下,上]
     homeBox: { min: [-0.55, -0.03, -0.35], max: [0.75, 1.35, 0.35] },
   },
   LAYERS: {

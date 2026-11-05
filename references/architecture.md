@@ -89,8 +89,9 @@ model = {
 ```js
 world = {
   LAYERS: { key: { inAll?: true } },          // 图层开关表（步骤 layers 引用这些键）
-  CAMERA: { pitch, yaw?, polar:[min,max], air, ty, focusY:[a,b],
-            homeBox:{min:[x,y,z],max:[x,y,z]}, fov?, dist? },   // 初始机位与轨道限制
+  CAMERA: { pitch, yaw?, polar?:[min,max], clampPolar?:true, air, ty, focusY:[a,b],
+            homeBox:{min:[x,y,z],max:[x,y,z]}, fov?, dist? },   // 初始机位；极角默认自由环绕（可任意仰望/俯视），
+                                                                // 仅当显式写 clampPolar:true 才按 polar 区间夹持
   TONE?:  { finish?:true, sun:[x,y,z], envIntensity },          // 质感套件
   build(ctx) => ({
     units: [ { box:Box3, group, label:Vector3, ring:{x,z,r,w,y}|false, labelVisible?(ctx) } ],

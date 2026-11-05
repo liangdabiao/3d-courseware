@@ -25,11 +25,13 @@ function validate(C, wld, world, model, K) {
   (C.units || []).forEach((u, i) => {
     if (!(u.color >= 1 && u.color <= 5)) errs.push(`C.units[${i}].color=${u.color}：识别色只能是 1–5（规范 §2.4）`);
   });
-  const polar = wld.CAMERA?.polar ?? [8, 62];
+  /* 极角夹持仅在课程显式 clampPolar:true 时生效；此时步骤 pitch 应落在 polar 区间内 */
+  const polarClamped = !!(world.CAMERA?.clampPolar && Array.isArray(world.CAMERA?.polar));
+  const polar = world.CAMERA?.polar ?? [8, 62];
   const enumSw = Object.fromEntries((K.switches || []).filter((s) => s.states).map((s) => [s.key, s.states.map((x) => x.v)]));
   C.steps.forEach((st, i) => {
     const d = `steps[${i}]「${st.tag}」`;
-    if (st.cam?.pitch != null && (st.cam.pitch < polar[0] || st.cam.pitch > polar[1]))
+    if (polarClamped && st.cam?.pitch != null && (st.cam.pitch < polar[0] || st.cam.pitch > polar[1]))
       errs.push(`${d}.cam.pitch=${st.cam.pitch} 超出 CAMERA.polar [${polar[0]}, ${polar[1]}]`);
     for (const k of st.layers || [])
       if (k !== "all" && !(k in (world.LAYERS || {}))) errs.push(`${d}.layers 里的 '${k}' 不在 world.LAYERS`);
@@ -273,6 +275,13 @@ export function boot({ C, world, model, console: K }) {
     st.act?.demo && hud.toast("已重置本步");
   }
 
+  function homePose() {
+    if ((world.CAMERA || {}).homeBox) {
+      const b = new THREE.Box3(new THREE.Vector3(...world.CAMERA.homeBox.min), new THREE.Vector3(...world.CAMERA.homeBox.max));
+      return poseForBox(b, camera, { pitch: world.CAMERA.pitch ?? 22, ty: 0.15 });
+    }
+    return null;
+  }
   function flyToStep(i, instant) {
     const st = C.steps[i];
     let pose = null;
@@ -281,10 +290,8 @@ export function boot({ C, world, model, console: K }) {
       pose = poseForBox(b, camera, { pitch: st.cam.pitch ?? 22, yaw: st.cam.yaw, ty: 0.12 });
     } else if (st.unit >= 0 && wld.units?.[st.unit]?.box) {
       pose = poseForBox(wld.units[st.unit].box, camera, { pitch: st.cam?.pitch ?? 22, ty: 0.12 });
-    } else if ((world.CAMERA || {}).homeBox) {
-      const b = new THREE.Box3(new THREE.Vector3(...world.CAMERA.homeBox.min), new THREE.Vector3(...world.CAMERA.homeBox.max));
-      pose = poseForBox(b, camera, { pitch: world.CAMERA.pitch ?? 22, ty: 0.15 });
     }
+    if (!pose) pose = homePose(); // 空包围盒/缺配置一律兜底回 home 机位
     if (!pose) return;
     if (instant) {
       camera.position.copy(pose.pos);
@@ -293,9 +300,11 @@ export function boot({ C, world, model, console: K }) {
     } else flyCamera(camera, controls, pose.pos, pose.tgt, 0.8);
   }
   function focusUnit(i) {
-    if (wld.units?.[i]?.box) flyCamera(camera, controls,
-      poseForBox(wld.units[i].box, camera, { pitch: 22, ty: 0.12 }).pos,
-      wld.units[i].box.getCenter(new THREE.Vector3()), 0.6);
+    const u = wld.units?.[i];
+    if (!u?.box) return;
+    const pose = poseForBox(u.box, camera, { pitch: 22, ty: 0.12 });
+    if (!pose) return;
+    flyCamera(camera, controls, pose.pos, pose.tgt, 0.6);
   }
 
   /* ---------------- 检测（quiz） ---------------- */
@@ -602,7 +611,17 @@ export function boot({ C, world, model, console: K }) {
     }
   }
 
+  /* 相机自愈：任何路径漏进来的 NaN/Infinity 都不允许白屏 */
+  const lastGoodCam = { pos: new THREE.Vector3(6, 4, 8), tgt: new THREE.Vector3(0, 0.5, 0) };
+  const finiteV3 = (v) => Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+
   function tickFrame(now) {
+    if (!finiteV3(camera.position) || !finiteV3(controls.target)) {
+      camera.position.copy(lastGoodCam.pos);
+      controls.target.copy(lastGoodCam.tgt);
+      controls.update();
+      console.warn("[camera] 检测到非有限机位，已自动恢复上一好机位");
+    }
     const rawDt = (now - last) / 1000;
     last = now;
     const dt = clamp(Math.min(0.05, rawDt), 0, 0.05); // 负 dt（时钟回拨/pump 后）一律按 0 处理
@@ -648,7 +667,11 @@ export function boot({ C, world, model, console: K }) {
     if (chartT >= 0.35) { hud.paneConsole.redrawChart?.(S, R); chartT = 0; }
 
     updateLabels();
-    renderer.render(scene, camera);
+    if (finiteV3(camera.position)) {
+      lastGoodCam.pos.copy(camera.position);
+      lastGoodCam.tgt.copy(controls.target);
+      renderer.render(scene, camera);
+    }
 
     /* lowfps 降级：启动 3s 宽限，连续低帧 4 窗口 → body.lowfps */
     fps.acc += rawDt; fps.n++;

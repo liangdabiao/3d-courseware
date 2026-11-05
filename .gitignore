@@ -1,0 +1,12 @@
+# 依赖与构建产物不入库（模板自带 package.json，npm install 即可还原）
+node_modules/
+*.log
+
+# 课件构建产物不入库；仅保留单摆示例的构建结果作为在线演示
+assets/starter/dist/*
+!assets/starter/dist/pendulum-demo.html
+dist/
+
+# 系统杂项
+.DS_Store
+Thumbs.db
